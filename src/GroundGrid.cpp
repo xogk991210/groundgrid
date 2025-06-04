@@ -28,7 +28,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <chrono>
 
 // Ros package for package path resolution
-#include <ros/package.h>
+#include <rclcpp/rclcpp.hpp>
 
 // Grid map
 #include <grid_map_cv/GridMapCvConverter.hpp>
@@ -47,16 +47,16 @@ GroundGrid::~GroundGrid() {}
 
 void GroundGrid::setConfig(groundgrid::GroundGridConfig & config) { config_ = config; }
 
-void GroundGrid::initGroundGrid(const nav_msgs::OdometryConstPtr &inOdom)
+void GroundGrid::initGroundGrid(const nav_msgs::msg::Odometry::ConstSharedPtr &inOdom)
 {
     auto start = std::chrono::steady_clock::now();
-    geometry_msgs::PoseWithCovarianceStamped odomPose, mapPose;
+    geometry_msgs::msg::PoseWithCovarianceStamped odomPose, mapPose;
 
     mMap_ptr = std::make_shared<grid_map::GridMap, const std::vector< std::string >>({"points", "ground", "groundpatch", "minGroundHeight", "maxGroundHeight"});
     grid_map::GridMap& map = *mMap_ptr;
     map.setFrameId("map");
     map.setGeometry(grid_map::Length(mDimension, mDimension), mResolution, grid_map::Position(inOdom->pose.pose.position.x,inOdom->pose.pose.position.y));
-    ROS_INFO("Created map with size %f x %f m (%i x %i cells).",
+    RCLCPP_INFO(rclcpp::get_logger("groundgrid"), "Created map with size %f x %f m (%i x %i cells).",
              map.getLength().x(), map.getLength().y(),
              map.getSize()(0), map.getSize()(1));
 
@@ -75,12 +75,12 @@ void GroundGrid::initGroundGrid(const nav_msgs::OdometryConstPtr &inOdom)
     map["maxGroundHeight"].setConstant(-100.0);
 
     auto end = std::chrono::steady_clock::now();
-    ROS_DEBUG_STREAM("transforms lookup " << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "transforms lookup %ldms", std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count());
     mLastPose = odomPose;
 }
 
 
-std::shared_ptr<grid_map::GridMap> GroundGrid::update(const nav_msgs::OdometryConstPtr &inOdom)
+std::shared_ptr<grid_map::GridMap> GroundGrid::update(const nav_msgs::msg::Odometry::ConstSharedPtr &inOdom)
 {
     if(!mMap_ptr){
         initGroundGrid(inOdom);
@@ -90,14 +90,14 @@ std::shared_ptr<grid_map::GridMap> GroundGrid::update(const nav_msgs::OdometryCo
     auto start = std::chrono::steady_clock::now();
     grid_map::GridMap& map = *mMap_ptr;
 
-    geometry_msgs::PoseWithCovarianceStamped poseDiff;
+    geometry_msgs::msg::PoseWithCovarianceStamped poseDiff;
     poseDiff.pose.pose.position.x = inOdom->pose.pose.position.x - mLastPose.pose.pose.position.x;
     poseDiff.pose.pose.position.y = inOdom->pose.pose.position.y - mLastPose.pose.pose.position.y;
     std::vector<grid_map::BufferRegion> damage;
     map.move(grid_map::Position(inOdom->pose.pose.position.x, inOdom->pose.pose.position.y), damage);
 
     // static so if the new transform is not yet available, we can use the last one
-    static geometry_msgs::TransformStamped base_to_map;
+    static geometry_msgs::msg::TransformStamped base_to_map;
 
     try{
         base_to_map = mTfBuffer.lookupTransform("base_link", "map", inOdom->header.stamp);
@@ -105,15 +105,15 @@ std::shared_ptr<grid_map::GridMap> GroundGrid::update(const nav_msgs::OdometryCo
     catch (tf2::LookupException& e)
     {
         // potentially degraded performance
-        ROS_WARN("no transform? -> error: %s", e.what());
+        RCLCPP_WARN(rclcpp::get_logger("groundgrid"), "no transform? -> error: %s", e.what());
     }
     catch (tf2::ExtrapolationException& e)
     {
         // can happen when new transform has not yet been published, we can use the old one instead
-        ROS_DEBUG("need to extrapolate a transform? -> error: %s", e.what());
+        RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "need to extrapolate a transform? -> error: %s", e.what());
     }
 
-    geometry_msgs::PointStamped ps;
+    geometry_msgs::msg::PointStamped ps;
     ps.header = inOdom->header;
     ps.header.frame_id = "map";
     grid_map::Position pos;
@@ -142,6 +142,6 @@ std::shared_ptr<grid_map::GridMap> GroundGrid::update(const nav_msgs::OdometryCo
 
     map.convertToDefaultStartIndex();
     auto end = std::chrono::steady_clock::now();
-    ROS_DEBUG_STREAM("total " << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "total %ldms", std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count());
     return mMap_ptr;
 }
