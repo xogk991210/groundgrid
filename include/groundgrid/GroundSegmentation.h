@@ -26,8 +26,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 // ros
-#include <sensor_msgs/PointCloud2.h>
-#include <geometry_msgs/TransformStamped.h>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 // Pcl
 #include <pcl_ros/point_cloud.h>
@@ -50,7 +50,7 @@ class GroundSegmentation {
     typedef velodyne_pointcloud::PointXYZIR PCLPoint;
 
     GroundSegmentation() {};
-    void init(ros::NodeHandle& nodeHandle, const size_t dimension, const float& resolution);
+    void init(const size_t dimension, const float& resolution);
     pcl::PointCloud<PCLPoint>::Ptr filter_cloud(const pcl::PointCloud<PCLPoint>::Ptr cloud, const PCLPoint& cloudOrigin, const geometry_msgs::TransformStamped& mapToBase, grid_map::GridMap &map);
     void insert_cloud(const pcl::PointCloud<PCLPoint>::Ptr cloud, const size_t start, const size_t end, const PCLPoint& cloudOrigin, std::vector<std::pair<size_t, grid_map::Index> >& point_index, std::vector<std::pair<size_t, grid_map::Index> >& ignored, std::vector<size_t>& outliers, grid_map::GridMap &map);
     void setConfig(const groundgrid::GroundGridConfig& config);

@@ -25,6 +25,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <groundgrid/GroundSegmentation.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <rclcpp/rclcpp.hpp>
 
 #include <chrono>
 #include <unordered_map>
@@ -34,7 +35,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 using namespace groundgrid;
 
 
-void GroundSegmentation::init(ros::NodeHandle& nodeHandle, const size_t dimension, const float& resolution){
+void GroundSegmentation::init(const size_t dimension, const float& resolution){
     const size_t cellCount = std::round(dimension/resolution);
 
     expectedPoints.resize(cellCount, cellCount);
@@ -47,7 +48,7 @@ void GroundSegmentation::init(ros::NodeHandle& nodeHandle, const size_t dimensio
     Eigen::initParallel();
 }
 
-pcl::PointCloud<GroundSegmentation::PCLPoint>::Ptr GroundSegmentation::filter_cloud(const pcl::PointCloud<PCLPoint>::Ptr cloud, const PCLPoint& cloudOrigin, const geometry_msgs::TransformStamped& mapToBase, grid_map::GridMap &map)
+pcl::PointCloud<GroundSegmentation::PCLPoint>::Ptr GroundSegmentation::filter_cloud(const pcl::PointCloud<PCLPoint>::Ptr cloud, const PCLPoint& cloudOrigin, const geometry_msgs::msg::TransformStamped& mapToBase, grid_map::GridMap &map)
 {
     auto start = std::chrono::steady_clock::now();
     static double avg_insertion_time = 0.0;
@@ -121,7 +122,7 @@ pcl::PointCloud<GroundSegmentation::PCLPoint>::Ptr GroundSegmentation::filter_cl
     std::chrono::duration<double> elapsed_seconds = end-start;
     const double milliseconds = elapsed_seconds.count() * 1000;
     avg_insertion_time = (milliseconds + time_vals * avg_insertion_time)/(time_vals+1);
-    ROS_DEBUG_STREAM("ground point rasterization took " << milliseconds << "ms (avg " << avg_insertion_time << " ms)");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "ground point rasterization took %fms (avg %f ms)", milliseconds, avg_insertion_time);
 
     start = std::chrono::steady_clock::now();
 
@@ -135,13 +136,13 @@ pcl::PointCloud<GroundSegmentation::PCLPoint>::Ptr GroundSegmentation::filter_cl
     end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     avg_detection_time = (elapsed_seconds.count() * 1000 + time_vals * avg_detection_time)/(time_vals+1);
-    ROS_DEBUG_STREAM("ground patch detection took " << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms (avg " << avg_detection_time << " ms)");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "ground patch detection took %ldms (avg %f ms)", std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count(), avg_detection_time);
     ++time_vals;
 
     start = std::chrono::steady_clock::now();
     spiral_ground_interpolation(map, mapToBase);
     end = std::chrono::steady_clock::now();
-    ROS_DEBUG_STREAM("ground interpolation took " << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "ground interpolation took %ldms", std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count());
 
     start = std::chrono::steady_clock::now();
     map["points"].setConstant(0.0);
@@ -191,7 +192,7 @@ pcl::PointCloud<GroundSegmentation::PCLPoint>::Ptr GroundSegmentation::filter_cl
     end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     avg_segmentation_time = (elapsed_seconds.count() * 1000 + (time_vals-1) * avg_segmentation_time)/time_vals;
-    ROS_DEBUG_STREAM("point cloud segmentation took " << std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms (avg " << avg_segmentation_time << " ms)");
+    RCLCPP_DEBUG(rclcpp::get_logger("groundgrid"), "point cloud segmentation took %ldms (avg %f ms)", std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count(), avg_segmentation_time);
 
     return filtered_cloud;
 }
@@ -395,7 +396,7 @@ template <int S> void GroundSegmentation::detect_ground_patch(grid_map::GridMap&
 }
 
 
-void GroundSegmentation::spiral_ground_interpolation(grid_map::GridMap &map, const geometry_msgs::TransformStamped &toBase) const
+void GroundSegmentation::spiral_ground_interpolation(grid_map::GridMap &map, const geometry_msgs::msg::TransformStamped &toBase) const
 {
     static grid_map::Matrix& ggl = map["ground"];
     static grid_map::Matrix& gvl = map["groundpatch"];
@@ -403,7 +404,7 @@ void GroundSegmentation::spiral_ground_interpolation(grid_map::GridMap &map, con
     const auto& center_idx = map_size(0)/2-1;
 
     gvl(center_idx,center_idx) = 1.0f;
-    geometry_msgs::PointStamped ps;
+    geometry_msgs::msg::PointStamped ps;
     ps.header.frame_id = "base_link";
     tf2::doTransform(ps,ps,toBase);
 
